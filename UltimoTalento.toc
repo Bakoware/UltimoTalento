@@ -2,7 +2,7 @@
 ## Title: UltimoTalento
 ## Notes: Builds populares por clase y rol (PvE/PvP); pone los talentos en cola mientras subes de nivel. /ut
 ## Author: Bakoware
-## Version: 3.1
+## Version: 3.2
 ## SavedVariablesPerCharacter: UltimoTalentoDB
 Builds.lua
 UltimoTalento.lua

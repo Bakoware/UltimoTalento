@@ -1,9 +1,10 @@
--- UltimoTalento 3.1
+-- UltimoTalento 3.2
 -- Detecta tu clase, te ofrece builds populares por rol (PvE/PvP) o tus propias builds,
 -- muestra una vista previa de los 3 árboles (lo que tienes, lo que falta y el siguiente
 -- talento) y, al activar una build, pone tus puntos en cola: cada punto libre se gasta
 -- solo en el siguiente talento (árbol principal primero, de arriba hacia abajo).
 -- Abre la ventana con /ut (o /tc) o con el botón del minimapa. Idioma: español / inglés.
+-- Especialización doble: cada especialización tiene su propia build; la cola llena la activa.
 
 local VERDE, ROJO, AMARILLO, GRIS, AZUL = "|cff33ff33", "|cffff4444", "|cffffd200", "|cff999999", "|cff66ccff"
 local MAX_PUNTOS = 71
@@ -54,6 +55,14 @@ local TEXTOS = {
 		chatIdioma = "Idioma: español.",
 		miniSin = "Sin build activa", miniBuild = "Build: %s", miniAyuda = "Clic: abrir   Arrastrar: mover",
 		idiomaTip = "Cambiar idioma / Change language",
+		espec = "Espec. %d", especActivaTag = " (activa)",
+		especTip = "Especialización %d", especTipActiva = "Es tu especialización activa.",
+		especTipInactiva = "Cámbiala desde la ventana de talentos para que la cola la llene.",
+		especNoDisp = "Especialización doble: desde nivel 40, cómprala al instructor de tu clase (1000 de oro).",
+		inactivaNota = "\n%sEsta especialización no está activa: la cola la llenará cuando la actives.|r",
+		lineaEspec = "%s%s: %s%s|r %s  %d/%d", lineaSinBuild = "%s%s: %ssin build|r",
+		chatActivadaEspec = "Build asignada a la %s: %s%s|r. Se llenará cuando actives esa especialización.",
+		chatCambioEspec = "Especialización %d activa: %s.", chatSinBuildEspec = "sin build asignada",
 	},
 	en = {
 		titulo = "UltimoTalento — %s level %d",
@@ -95,6 +104,14 @@ local TEXTOS = {
 		chatIdioma = "Language: English.",
 		miniSin = "No active build", miniBuild = "Build: %s", miniAyuda = "Click: open   Drag: move",
 		idiomaTip = "Cambiar idioma / Change language",
+		espec = "Spec %d", especActivaTag = " (active)",
+		especTip = "Specialization %d", especTipActiva = "This is your active specialization.",
+		especTipInactiva = "Switch to it in the talent window so the queue can fill it.",
+		especNoDisp = "Dual specialization: from level 40, buy it from your class trainer (1000 gold).",
+		inactivaNota = "\n%sThis specialization is not active: the queue will fill it once you activate it.|r",
+		lineaEspec = "%s%s: %s%s|r %s  %d/%d", lineaSinBuild = "%s%s: %sno build|r",
+		chatActivadaEspec = "Build assigned to %s: %s%s|r. It will be filled when you activate that spec.",
+		chatCambioEspec = "Specialization %d active: %s.", chatSinBuildEspec = "no build assigned",
 	},
 }
 
@@ -118,18 +135,23 @@ local claseLocal, clase = UnitClass("player")
 ------------------------------------------------------------------------
 
 -- info[tab][i] = { nombre, icono, fila, col, rango, max, pre = índice del requisito }
-local function LeerArbol()
+local function GrupoActivo() return (GetActiveTalentGroup and GetActiveTalentGroup()) or 1 end
+local function NumGrupos() return (GetNumTalentGroups and GetNumTalentGroups()) or 1 end
+
+-- Lee el árbol de una especialización (por defecto la activa)
+local function LeerArbol(grupo)
+	grupo = grupo or GrupoActivo()
 	local info = {}
 	for tab = 1, GetNumTalentTabs() do
 		info[tab] = {}
 		local pos = {}
 		for i = 1, GetNumTalents(tab) do
-			local nombre, icono, fila, col, rango, max = GetTalentInfo(tab, i)
+			local nombre, icono, fila, col, rango, max = GetTalentInfo(tab, i, false, false, grupo)
 			info[tab][i] = { nombre = nombre, icono = icono, fila = fila, col = col, rango = rango, max = max }
 			pos[fila .. ":" .. col] = i
 		end
 		for i = 1, GetNumTalents(tab) do
-			local pf, pc = GetTalentPrereqs(tab, i)
+			local pf, pc = GetTalentPrereqs(tab, i, false, false, grupo)
 			if pf then info[tab][i].pre = pos[pf .. ":" .. pc] end
 		end
 	end
@@ -280,20 +302,30 @@ local motor = CreateFrame("Frame")
 local pendiente, espera, reintento = nil, 0, 0
 local Refrescar
 
-local function Libres() return UnitCharacterPoints("player") or 0 end
+local function Libres(grupo)
+	if GetUnspentTalentPoints then return GetUnspentTalentPoints(false, false, grupo or GrupoActivo()) or 0 end
+	return UnitCharacterPoints("player") or 0
+end
+
+-- Build asignada a una especialización (por defecto la activa)
+local function Activo(grupo)
+	if not DB or not DB.activos then return end
+	local b = DB.activos[grupo or GrupoActivo()]
+	if b and b.clase == clase then return b end
+end
 
 local function Intentar()
-	if not DB or not DB.activo or DB.pausado or pendiente then return end
-	if DB.activo.clase ~= clase then return end
+	local activo = Activo()
+	if not activo or DB.pausado or pendiente then return end
 	if Libres() <= 0 or UnitAffectingCombat("player") then return end
 	local info = LeerArbol()
-	local obj, total = Decodificar(DB.activo.codigo, info)
+	local obj, total = Decodificar(activo.codigo, info)
 	if not obj then return end
 	local t, i = SiguientePaso(obj, info, RangosActuales(info))
 	if not t then
 		local _, _, gastados = Comparar(obj, info)
 		if gastados >= total then
-			msg(VERDE .. L("chatCompleta", NombreBuild(DB.activo)))
+			msg(VERDE .. L("chatCompleta", NombreBuild(activo)))
 		else
 			msg(ROJO .. L("chatNoSig"))
 			DB.pausado = true
@@ -302,7 +334,7 @@ local function Intentar()
 		return
 	end
 	local d = info[t][i]
-	pendiente = { nombre = d.nombre, rango = d.rango + 1, max = obj[t][i], libres = Libres() }
+	pendiente = { nombre = d.nombre, rango = d.rango + 1, max = obj[t][i], libres = Libres(), grupo = GrupoActivo() }
 	espera = 0
 	LearnTalent(t, i)
 end
@@ -314,7 +346,7 @@ motor:SetScript("OnUpdate", function(self, dt)
 	end
 	if pendiente then
 		espera = espera + dt
-		if Libres() < pendiente.libres then
+		if Libres(pendiente.grupo) < pendiente.libres then
 			msg(L("chatPuse", AMARILLO, pendiente.nombre, pendiente.rango, pendiente.max))
 			pendiente = nil
 			reintento = 0.6
@@ -328,10 +360,16 @@ motor:SetScript("OnUpdate", function(self, dt)
 	end
 end)
 
+local vistaGrupo = 1 -- especialización que se está viendo en la ventana
+
 local function Activar(b)
-	DB.activo = { clase = clase, nombre = b.nombre, en = b.en, codigo = b.codigo }
+	DB.activos[vistaGrupo] = { clase = clase, nombre = b.nombre, en = b.en, codigo = b.codigo }
 	DB.pausado = nil
-	msg(L("chatActivada", AMARILLO, NombreBuild(b)))
+	if vistaGrupo == GrupoActivo() then
+		msg(L("chatActivada", AMARILLO, NombreBuild(b)))
+	else
+		msg(L("chatActivadaEspec", L("espec", vistaGrupo), AMARILLO, NombreBuild(b)))
+	end
 	reintento = 0.5
 end
 
@@ -400,6 +438,31 @@ btnIdioma:SetBackdropBorderColor(1, 0.82, 0, 0.8)
 btnIdioma:SetHighlightTexture("Interface\\Buttons\\UI-Common-MouseHilight", "ADD")
 btnIdioma.texto = btnIdioma:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
 btnIdioma.texto:SetPoint("CENTER")
+
+-- Selector de especialización (1 / 2)
+local botonesEspec = {}
+for g = 1, 2 do
+	local b = CreateFrame("Button", nil, UI, "UIPanelButtonTemplate")
+	SZ(b, 96, 20)
+	b:SetPoint("TOPLEFT", 92 + (g - 1) * 98, -16)
+	b:SetScript("OnClick", function() vistaGrupo = g Refrescar() end)
+	b:SetScript("OnEnter", function(self)
+		GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
+		GameTooltip:AddLine(L("especTip", g))
+		if g > NumGrupos() then
+			GameTooltip:AddLine(L("especNoDisp"), 1, 1, 1, true)
+		elseif g == GrupoActivo() then
+			GameTooltip:AddLine(L("especTipActiva"), 0.2, 1, 0.2)
+		else
+			GameTooltip:AddLine(L("especTipInactiva"), 1, 1, 1, true)
+		end
+		local a = Activo(g)
+		if a then GameTooltip:AddLine(L("miniBuild", NombreBuild(a)), 1, 0.82, 0) end
+		GameTooltip:Show()
+	end)
+	b:SetScript("OnLeave", function() GameTooltip:Hide() end)
+	botonesEspec[g] = b
+end
 
 -- Estado de la vista
 local filtroModo, filtroRol = "Todos", "Todos"
@@ -541,7 +604,7 @@ local function CrearCelda(t, padre)
 	b:SetHighlightTexture("Interface\\Buttons\\ButtonHilight-Square", "ADD")
 	b:SetScript("OnEnter", function(self)
 		GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-		GameTooltip:SetTalent(self.t, self.i)
+		GameTooltip:SetTalent(self.t, self.i, false, false, vistaGrupo)
 		if VistaActual then
 			local d = VistaActual.info[self.t][self.i]
 			local o = VistaActual.obj[self.t][self.i]
@@ -734,7 +797,9 @@ local function DetalleBuild(b, info)
 	barraTexto:SetText(L("etapa", hechos, total, total > 0 and math.floor(hechos * 100 / total) or 0))
 
 	btnActivar:SetScript("OnClick", function() Activar(b) Refrescar() end)
-	if puede and not (DB.activo and DB.activo.codigo == b.codigo) then btnActivar:Enable() end
+	local asignada = Activo(vistaGrupo)
+	if puede and not (asignada and asignada.codigo == b.codigo) then btnActivar:Enable() end
+	if vistaGrupo ~= GrupoActivo() then detEstado:SetText(detEstado:GetText() .. L("inactivaNota", GRIS)) end
 	DibujarArboles(obj, info)
 	leyenda:SetText(VERDE .. L("leyenda", AMARILLO, AZUL, ROJO, GRIS))
 end
@@ -755,8 +820,16 @@ end
 
 Refrescar = function()
 	if not DB or not UI:IsShown() then return end
-	local info = LeerArbol()
+	if vistaGrupo > NumGrupos() then vistaGrupo = GrupoActivo() end
+	local info = LeerArbol(vistaGrupo)
 	AplicarIdioma()
+	for g, b in ipairs(botonesEspec) do
+		local txt = L("espec", g)
+		if g == GrupoActivo() and NumGrupos() > 1 then txt = VERDE .. txt .. "|r" end
+		b:SetText(txt)
+		if g == vistaGrupo then b:LockHighlight() else b:UnlockHighlight() end
+		if g > NumGrupos() then b:Disable() else b:Enable() end
+	end
 	titulo:SetText(L("titulo", claseLocal, UnitLevel("player")))
 	for v, b in pairs(botonesModo) do if v == filtroModo then b:LockHighlight() else b:UnlockHighlight() end end
 	for v, b in pairs(botonesRol) do if v == filtroRol then b:LockHighlight() else b:UnlockHighlight() end end
@@ -772,7 +845,8 @@ Refrescar = function()
 			local obj = Decodificar(b.codigo, info)
 			local color = b.mia and AZUL or (b.modo == "PvP" and "|cffff8080" or "|cff80c0ff")
 			local etiqueta = b.mia and L("Mía") or L(b.modo)
-			local activa = (DB.activo and DB.activo.codigo == b.codigo) and (VERDE .. L("activa") .. "|r") or ""
+			local asignada = Activo(vistaGrupo)
+			local activa = (asignada and asignada.codigo == b.codigo) and (VERDE .. L("activa") .. "|r") or ""
 			f.texto:SetText(string.format("%s[%s]|r %s %s%s|r%s", color, etiqueta, NombreBuild(b), GRIS, obj and Reparto(obj) or "?", activa))
 			f.build = b
 			if b == seleccion then f.sel:Show() else f.sel:Hide() end
@@ -799,26 +873,33 @@ Refrescar = function()
 		leyenda:SetText(GRIS .. L("mostrandoActuales"))
 	end
 
-	if DB.activo and DB.activo.clase == clase then
-		local obj, total = Decodificar(DB.activo.codigo, info)
-		local gastados = 0
-		for t = 1, #info do for _, d in ipairs(info[t]) do gastados = gastados + d.rango end end
-		local sig = ""
-		if obj then
-			local t, i = SiguientePaso(obj, info, RangosActuales(info))
-			sig = t and L("siguiente", AZUL .. info[t][i].nombre .. "|r") or (VERDE .. L("completaTxt") .. "|r")
+	-- Panel inferior: build de cada especialización
+	local lineas = {}
+	for g = 1, NumGrupos() do
+		local a = Activo(g)
+		local nombreEspec = L("espec", g) .. ((g == GrupoActivo() and NumGrupos() > 1) and L("especActivaTag") or "")
+		local marca = g == vistaGrupo and "> " or ""
+		if a then
+			local inf = LeerArbol(g)
+			local obj, total = Decodificar(a.codigo, inf)
+			local gastados = 0
+			for t = 1, #inf do for _, d in ipairs(inf[t]) do gastados = gastados + d.rango end end
+			local estado = DB.pausado and (ROJO .. L("pausaTag") .. "|r") or (VERDE .. L("onTag") .. "|r")
+			table.insert(lineas, L("lineaEspec", marca, nombreEspec, AMARILLO, NombreBuild(a), estado, gastados, total or 0))
+			if g == GrupoActivo() and obj then
+				local t, i = SiguientePaso(obj, inf, RangosActuales(inf))
+				local sig = t and L("siguiente", AZUL .. inf[t][i].nombre .. "|r") or (VERDE .. L("completaTxt") .. "|r")
+				table.insert(lineas, (sig:gsub("\n", "")))
+			end
+		else
+			table.insert(lineas, L("lineaSinBuild", marca, nombreEspec, GRIS))
 		end
-		actTexto:SetText(L("activaTxt", AMARILLO, NombreBuild(DB.activo),
-			DB.pausado and (ROJO .. L("pausaTag") .. "|r") or (VERDE .. L("onTag") .. "|r"),
-			gastados, total or 0, Libres(), sig))
-		btnPausa:SetText(DB.pausado and L("reanudar") or L("pausar"))
-		btnPausa:Enable()
-		btnQuitar:Enable()
-	else
-		actTexto:SetText(GRIS .. L("sinActiva"))
-		btnPausa:Disable()
-		btnQuitar:Disable()
 	end
+	if NumGrupos() < 2 then table.insert(lineas, GRIS .. L("especNoDisp") .. "|r") end
+	actTexto:SetText(table.concat(lineas, "\n"))
+	btnPausa:SetText(DB.pausado and L("reanudar") or L("pausar"))
+	if Activo() then btnPausa:Enable() else btnPausa:Disable() end
+	if Activo(vistaGrupo) then btnQuitar:Enable() else btnQuitar:Disable() end
 end
 
 -- Acciones de los botones
@@ -836,7 +917,7 @@ end)
 btnIdioma:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
 btnPersonalizar:SetScript("OnClick", function()
-	local info = LeerArbol()
+	local info = LeerArbol(vistaGrupo)
 	edicion = seleccion and Decodificar(seleccion.codigo, info) or RangosVacios(info)
 	rolEdicion = seleccion and seleccion.rol or "DPS"
 	if seleccion then
@@ -847,8 +928,8 @@ btnPersonalizar:SetScript("OnClick", function()
 	Refrescar()
 end)
 btnCancelar:SetScript("OnClick", function() edicion = nil cajaNombre:ClearFocus() Refrescar() end)
-btnLimpiar:SetScript("OnClick", function() edicion = RangosVacios(LeerArbol()) Refrescar() end)
-btnMisTalentos:SetScript("OnClick", function() edicion = RangosActuales(LeerArbol()) Refrescar() end)
+btnLimpiar:SetScript("OnClick", function() edicion = RangosVacios(LeerArbol(vistaGrupo)) Refrescar() end)
+btnMisTalentos:SetScript("OnClick", function() edicion = RangosActuales(LeerArbol(vistaGrupo)) Refrescar() end)
 cajaNombre:SetScript("OnTextChanged", function() if edicion then Refrescar() end end)
 btnGuardar:SetScript("OnClick", function()
 	local nombre = cajaNombre:GetText()
@@ -863,7 +944,9 @@ btnGuardar:SetScript("OnClick", function()
 		table.insert(lista, b)
 	end
 	-- si era la build activa, actualiza la cola con los cambios
-	if DB.activo and DB.activo.nombre == nombre then DB.activo.codigo = codigo reintento = 0.5 end
+	for _, a in pairs(DB.activos) do
+		if a.nombre == nombre and a.clase == clase then a.codigo = codigo reintento = 0.5 end
+	end
 	msg(L("chatGuardada", AZUL, nombre, Reparto(edicion)))
 	edicion = nil
 	cajaNombre:ClearFocus()
@@ -886,8 +969,9 @@ btnPausa:SetScript("OnClick", function()
 	Refrescar()
 end)
 btnQuitar:SetScript("OnClick", function()
-	msg(L("chatQuitada", DB.activo and NombreBuild(DB.activo) or ""))
-	DB.activo = nil
+	local a = Activo(vistaGrupo)
+	msg(L("chatQuitada", a and NombreBuild(a) or ""))
+	DB.activos[vistaGrupo] = nil
 	Refrescar()
 end)
 
@@ -935,7 +1019,8 @@ mini:SetScript("OnClick", Alternar)
 mini:SetScript("OnEnter", function(self)
 	GameTooltip:SetOwner(self, "ANCHOR_LEFT")
 	GameTooltip:AddLine("UltimoTalento")
-	GameTooltip:AddLine(DB.activo and L("miniBuild", NombreBuild(DB.activo)) or L("miniSin"), 1, 1, 1)
+	local a = Activo()
+	GameTooltip:AddLine(a and L("miniBuild", NombreBuild(a)) or L("miniSin"), 1, 1, 1)
 	GameTooltip:AddLine(L("miniAyuda"), 0.6, 0.6, 0.6)
 	GameTooltip:Show()
 end)
@@ -950,18 +1035,30 @@ motor:RegisterEvent("CHARACTER_POINTS_CHANGED")
 motor:RegisterEvent("PLAYER_LEVEL_UP")
 motor:RegisterEvent("PLAYER_REGEN_ENABLED")
 motor:RegisterEvent("PLAYER_TALENT_UPDATE")
+motor:RegisterEvent("ACTIVE_TALENT_GROUP_CHANGED")
 motor:SetScript("OnEvent", function(self, ev)
 	if ev == "PLAYER_LOGIN" then
 		UltimoTalentoDB = UltimoTalentoDB or {}
 		DB = UltimoTalentoDB
 		DB.idioma = DB.idioma or "es"
+		DB.activos = DB.activos or {}
+		if DB.activo then DB.activos[1] = DB.activo DB.activo = nil end -- datos de versiones anteriores
+		vistaGrupo = GrupoActivo()
 		PosMini()
 		reintento = 3
-		if DB.activo then
-			msg(L("chatLogin", NombreBuild(DB.activo), DB.pausado and L("chatEnPausa") or ""))
+		local a = Activo()
+		if a then
+			msg(L("chatLogin", NombreBuild(a), DB.pausado and L("chatEnPausa") or ""))
 		else
 			msg(L("chatBienvenida"))
 		end
+	elseif ev == "ACTIVE_TALENT_GROUP_CHANGED" and DB then
+		pendiente = nil
+		vistaGrupo = GrupoActivo()
+		local a = Activo()
+		msg(L("chatCambioEspec", vistaGrupo, a and NombreBuild(a) or L("chatSinBuildEspec")))
+		reintento = 1.5
+		Refrescar()
 	elseif DB then
 		if not pendiente then reintento = math.max(reintento, 1) end
 		Refrescar()
