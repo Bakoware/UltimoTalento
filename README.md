@@ -16,7 +16,7 @@ Detecta tu clase, te ofrece builds populares por rol (Tanque, DPS y Sanador) par
 ## Instalación
 
 1. **Cierra el WoW por completo.** El juego solo detecta addons nuevos al arrancar; `/reload` no basta.
-2. Descarga `UltimoTalento-v3.1.zip` desde la sección **Releases**.
+2. Descarga `UltimoTalento-v3.2.zip` desde la sección **Releases**.
 3. Descomprímelo dentro de la carpeta de addons de tu juego:
    ```
    <carpeta del WoW>\Interface\AddOns\
@@ -60,6 +60,17 @@ Detecta tu clase, te ofrece builds populares por rol (Tanque, DPS y Sanador) par
    - **No coinciden**: reinicia tus talentos con el instructor de tu clase y luego actívala.
 4. Pulsa **Activar build**. Cada punto libre se gastará solo y te avisará en el chat. El orden es: primero el árbol principal, de arriba hacia abajo, respetando filas y requisitos.
 
+### Especialización doble
+
+A partir del nivel 40 puedes comprar la segunda especialización al instructor de tu clase (1000 de oro). Con ella UltimoTalento maneja **una build por especialización**:
+
+1. Arriba de la ventana elige **Espec. 1** o **Espec. 2**. La que tienes activa sale en verde.
+2. Selecciona una build y pulsa **Activar build**: se asigna a la especialización que estás viendo. Por ejemplo, Elemental en la 1 y Restauración en la 2.
+3. La cola solo llena la especialización **activa**. Al cambiar de especialización en la ventana de talentos, el addon lo detecta y sigue con la build de esa especialización.
+4. Abajo de la ventana ves el progreso de las dos.
+
+Antes del nivel 40, el botón **Espec. 2** está desactivado y su tooltip explica cómo conseguirla.
+
 ### Crear tu propia build
 
 1. Pulsa **Personalizar**. Puedes partir de la build seleccionada, de cero con **Vaciar** o de tus talentos actuales con **Mis talentos**.
@@ -77,6 +88,7 @@ Hay 66 builds para las 10 clases (PvE y PvP de cada especialización), tomadas d
 - **`/ut` no hace nada.** El addon no cargó. Mira si está desactivado en la lista de AddOns o si hay un error de Lua (con Swatter o BugSack).
 - **Una build sale como "no válida".** El árbol de tu cliente es distinto al de esa build. El addon la bloquea para no poner puntos equivocados.
 - **No pone el punto.** La cola espera a que salgas de combate. Si falla, se pausa sola y te avisa; reanúdala desde la ventana.
+- **No llena mi segunda especialización.** La cola solo trabaja en la especialización activa. Cámbiala desde la ventana de talentos.
 - **Los nombres de los talentos siguen en español al cambiar a inglés.** Esos textos los da el cliente del juego, no el addon.
 
 ## Desinstalar
@@ -87,11 +99,11 @@ Borra la carpeta `Interface\AddOns\UltimoTalento`. Las opciones y builds guardad
 
 ## English
 
-**UltimoTalento** is a talent addon for WoW 3.3.5a (WotLK), made for UltimoWoW. It detects your class, offers popular PvE and PvP builds by role, previews your talent trees, and **spends your talent points automatically as you level** (from level 1 to 80). You can also design and save your own builds.
+**UltimoTalento** is a talent addon for WoW 3.3.5a (WotLK), made for UltimoWoW. It detects your class, offers popular PvE and PvP builds by role, previews your talent trees, and **spends your talent points automatically as you level** (from level 1 to 80). You can also design and save your own builds. With dual specialization, each spec gets its own build and the queue fills the active one.
 
 **Install:**
 1. Close WoW completely.
-2. Extract `UltimoTalento-v3.1.zip` into `<WoW folder>\Interface\AddOns\`, so you have `AddOns\UltimoTalento\UltimoTalento.toc`.
+2. Extract `UltimoTalento-v3.2.zip` into `<WoW folder>\Interface\AddOns\`, so you have `AddOns\UltimoTalento\UltimoTalento.toc`.
 3. Start the game and make sure UltimoTalento is enabled in the AddOns list.
 
 **Use:** open it with `/ut` or the minimap book button. Switch languages with the **ES | EN** toggle or with `/ut en`.
